@@ -45,8 +45,11 @@ class TestEntity with SerializableMixin, SyncableMixin {
 }
 
 class TestEntitySerializer extends Serializer<TestEntity> {
-  TestEntitySerializer({Map<String, dynamic>? data, TestEntity? instance})
-      : super(data: data, instance: instance);
+  TestEntitySerializer({
+    Map<String, dynamic>? data,
+    TestEntity? instance,
+    String prefix = '',
+  }) : super(data: data, instance: instance, prefix: prefix);
 
   @override
   final fields = [
@@ -135,6 +138,41 @@ void main() {
       serializer = TestEntitySerializer(instance: entity);
 
       expect(serializer.isValid(), isFalse);
+    });
+
+    test('normalizes incoming related URL from a different host', () {
+      final serializer = TestEntitySerializer(
+        data: const {},
+        prefix: 'https://current.example.com/m/',
+      );
+
+      final result = serializer.validateField(
+        const StringField('name', prefix: 'activity/'),
+        'https://other.example.com/m/activity/abc-123/',
+      );
+
+      expect(result, equals('abc-123'));
+    });
+
+    test('prefixes outgoing related UUID with current backend URL', () {
+      final serializer = TestEntitySerializer(
+        instance: TestEntity(
+          id: 1,
+          name: 'abc-123',
+          created: DateTime(2026),
+        ),
+        prefix: 'https://current.example.com/m/',
+      );
+
+      final result = serializer.validateField(
+        const StringField('name', prefix: 'activity/'),
+        'abc-123',
+      );
+
+      expect(
+        result,
+        equals('https://current.example.com/m/activity/abc-123/'),
+      );
     });
 
     test('Test TestEntitySerializer.toJson method with valid entity', () {

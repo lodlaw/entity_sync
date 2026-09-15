@@ -309,12 +309,24 @@ abstract class Serializer<TSerializable extends SerializableMixin> {
     if (field.prefix != null && value is String) {
       final completePrefix = '$prefix${field.prefix}';
 
-      // if the field is already has the prefix, remove it, else prepend to it
+      // if the field already has the prefix, remove it
       if (value.startsWith(prefix)) {
         value = value.replaceFirst(completePrefix, '');
 
         if (value.endsWith('/')) {
           value = value.substring(0, value.length - 1);
+        }
+      } else if (value.startsWith('http://') || value.startsWith('https://')) {
+        // full URL from another host, keep only the final path value
+        final uri = Uri.tryParse(value);
+
+        if (uri != null) {
+          final segments =
+              uri.pathSegments.where((segment) => segment.isNotEmpty).toList();
+
+          if (segments.isNotEmpty) {
+            value = segments.last;
+          }
         }
       } else {
         value = '$completePrefix$value/';
