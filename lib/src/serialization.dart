@@ -309,25 +309,55 @@ abstract class Serializer<TSerializable extends SerializableMixin> {
     if (field.prefix != null && value is String) {
       final completePrefix = '$prefix${field.prefix}';
 
-      // if the field already has the prefix, remove it
-      if (value.startsWith(prefix)) {
-        value = value.replaceFirst(completePrefix, '');
+      final lowerValue = value.toLowerCase();
+      final isAbsoluteUrl =
+          lowerValue.startsWith('http://') || lowerValue.startsWith('https://');
+
+      // Same-host URL for the expected resource.
+      if (value.startsWith(completePrefix)) {
+        value = value.substring(completePrefix.length);
 
         if (value.endsWith('/')) {
           value = value.substring(0, value.length - 1);
         }
-      } else if (value.startsWith('http://') || value.startsWith('https://')) {
-        // full URL from another host, keep only the final path value
+
+        if (value.isEmpty || value.contains('/')) {
+          throw ValidationException(
+            'Related URL for ${field.name} does not contain a valid id',
+          );
+        }
+      } else if (prefix.isNotEmpty && value.startsWith(prefix)) {
+        // Same host, but the URL points at a different resource.
+        throw ValidationException(
+          'Related URL for ${field.name} does not match ${field.prefix}',
+        );
+      } else if (isAbsoluteUrl) {
+        // Full URL from another host. It must end with {field.prefix}{id}/.
         final uri = Uri.tryParse(value);
+        final segments =
+            uri?.pathSegments.where((segment) => segment.isNotEmpty).toList();
+        final expectedSegments = field.prefix!
+            .split('/')
+            .where((segment) => segment.isNotEmpty)
+            .toList();
 
-        if (uri != null) {
-          final segments =
-              uri.pathSegments.where((segment) => segment.isNotEmpty).toList();
+        if (segments == null || segments.length < expectedSegments.length + 1) {
+          throw ValidationException(
+            'Related URL for ${field.name} does not contain a valid id',
+          );
+        }
 
-          if (segments.isNotEmpty) {
-            value = segments.last;
+        final prefixStart = segments.length - expectedSegments.length - 1;
+
+        for (var i = 0; i < expectedSegments.length; i++) {
+          if (segments[prefixStart + i] != expectedSegments[i]) {
+            throw ValidationException(
+              'Related URL for ${field.name} does not match ${field.prefix}',
+            );
           }
         }
+
+        value = segments.last;
       } else {
         value = '$completePrefix$value/';
       }
